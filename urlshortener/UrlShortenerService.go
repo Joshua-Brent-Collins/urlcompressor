@@ -1,7 +1,8 @@
 package urlshortener
 
+//_ here allows import for side effects/registration only
 import (
-    "github.com/go-redis/redis"
+    "urlcompressor/storage"
     "crypto/sha256"
     "encoding/base64"
     "strings"
@@ -10,13 +11,15 @@ import (
 type UrlShortener struct {
 
     UrlIdLength int64
-    RClient *redis.Client
+    StorageServiceClient *storage.StorageService
     BaseUrl string
 }
 
-func (us *UrlShortener)SetBaseUrl(baseUrl string) {
+func (us *UrlShortener) SetBaseUrl(baseUrl string) {
     if strings.LastIndex(baseUrl, "/") != (len(baseUrl) - 1) {
         us.BaseUrl = baseUrl + "/"
+    } else {
+        us.BaseUrl = baseUrl
     }
 }
 
@@ -34,11 +37,17 @@ func (us *UrlShortener) GenerateHash(input string, rounds int) string {
 
 func (us *UrlShortener) ShortenUrl(urlToShorten string) string {
     urlIdHash := us.GenerateHash(urlToShorten, 2)
-    us.RClient.Set(urlIdHash, urlToShorten, 0)
+    us.StorageServiceClient.Store(urlIdHash, urlToShorten)
     return us.BaseUrl + urlIdHash
 }
 
 func (us *UrlShortener) GetOriginalUrl(urlIdHash string) string {
-    cachedValue, _ := us.RClient.Get(urlIdHash).Result()
-    return cachedValue
+    return us.StorageServiceClient.Lookup(urlIdHash)
+}
+
+func CreateNewShortener(connections map[string]string, urlHashLength int64, baseUrl string) *UrlShortener {
+
+    urlShortenerPtr := &UrlShortener{UrlIdLength: urlHashLength, StorageServiceClient: storage.NewStorageService(connections)}
+    urlShortenerPtr.SetBaseUrl(baseUrl)
+    return urlShortenerPtr
 }
